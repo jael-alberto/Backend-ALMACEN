@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const ctrl = require('../controllers/inventarioController');
+const inventarioController = require('../controllers/inventarioController');
 
-router.get('/',     ctrl.getAll);
-router.post('/',    ctrl.create);
-router.get('/:id',  ctrl.getById);
-router.put('/:id',  ctrl.update);
-router.delete('/:id', ctrl.delete);
+router.get('/', inventarioController.getAll);
+router.get('/:id', inventarioController.getById);
+router.post('/', inventarioController.create);
+router.put('/:id', inventarioController.update);
+router.delete('/:id', inventarioController.delete);
 
 module.exports = router;

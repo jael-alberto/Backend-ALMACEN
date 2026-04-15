@@ -12,6 +12,9 @@ const permisoRoutes = require('./routes/permisoRoutes');
 const usuarioRoutes = require('./routes/usuarioRoutes');
 const estanteRoutes = require('./routes/estanteRoutes');
 const cajaRoutes = require('./routes/cajaRoutes');
+const inventarioRoutes = require('./routes/inventarioRoutes');
+const prestamoRoutes = require('./routes/prestamoRoutes');
+const movimientoRoutes = require('./routes/movimientoRoutes');
 
 // Middlewares
 app.use(cors());
@@ -26,6 +29,10 @@ app.use('/api/permisos', permisoRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/estantes', estanteRoutes);
 app.use('/api/cajas', cajaRoutes);
+app.use('/api/inventario', inventarioRoutes);
+app.use('/api/prestamos', prestamoRoutes);
+app.use('/api/movimientos', movimientoRoutes);
+
 
 
 // Ruta de prueba para ver si funciona
