@@ -56,16 +56,16 @@ model Permiso {
 // USUARIOS
 // =========================================
 model Usuario {
-  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tipo_documento   String?      @db.VarChar(20)
-  numero_documento String?      @unique @db.VarChar(50)
-  nombre           String       @db.VarChar(50)
-  apellido         String       @db.VarChar(50)
-  usuario          String       @unique @db.VarChar(50)
-  contrasena       String       @db.VarChar(255)
-  rol_id           String?      @db.Uuid
-  activo           Boolean      @default(true)
-  
+  id               String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tipo_documento   String? @db.VarChar(20)
+  numero_documento String? @unique @db.VarChar(50)
+  nombre           String  @db.VarChar(50)
+  apellido         String  @db.VarChar(50)
+  usuario          String  @unique @db.VarChar(50)
+  contrasena       String  @db.VarChar(255)
+  rol_id           String? @db.Uuid
+  activo           Boolean @default(true)
+
   // Relaciones
   rol         Role?        @relation(fields: [rol_id], references: [id])
   prestamos   Prestamo[]
@@ -78,13 +78,13 @@ model Usuario {
 // PROVEEDORES
 // =========================================
 model Proveedor {
-  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  codigo         String       @unique @db.VarChar(50)
-  nombre_empresa String?      @db.VarChar(100)
-  nombre_contacto String?     @db.VarChar(50)
-  telefono       String?      @db.VarChar(20)
-  email          String?      @db.VarChar(100)
-  inventarios    Inventario[]
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo          String       @unique @db.VarChar(50)
+  nombre_empresa  String?      @db.VarChar(100)
+  nombre_contacto String?      @db.VarChar(50)
+  telefono        String?      @db.VarChar(20)
+  email           String?      @db.VarChar(100)
+  inventarios     Inventario[]
 
   @@map("proveedores")
 }
@@ -93,17 +93,17 @@ model Proveedor {
 // PERSONAS
 // =========================================
 model Persona {
-  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tipo_documento   String?      @db.VarChar(20)
-  numero_documento String?      @unique @db.VarChar(50)
-  nombres          String?      @db.VarChar(100)
-  apellidos        String?      @db.VarChar(100)
-  tipo             String?      @db.VarChar(50)
-  telefono         String?      @db.VarChar(20)
-  email            String?      @db.VarChar(100)
-  
-  prestamos        Prestamo[]
-  movimientos      Movimiento[]
+  id               String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tipo_documento   String? @db.VarChar(20)
+  numero_documento String? @unique @db.VarChar(50)
+  nombres          String? @db.VarChar(100)
+  apellidos        String? @db.VarChar(100)
+  tipo             String? @db.VarChar(50)
+  telefono         String? @db.VarChar(20)
+  email            String? @db.VarChar(100)
+
+  prestamos   Prestamo[]
+  movimientos Movimiento[]
 
   @@map("personas")
 }
@@ -124,11 +124,11 @@ model CategoriaHerramienta {
 // ESTANTES
 // =========================================
 model Estante {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  codigo      String   @unique @db.VarChar(50)
-  ubicacion   String?  @db.VarChar(100)
-  descripcion String?  @db.Text
-  
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo      String  @unique @db.VarChar(50)
+  ubicacion   String? @db.VarChar(100)
+  descripcion String? @db.Text
+
   cajas              Caja[]
   inventarios        Inventario[]
   movimientos_origen Movimiento[] @relation("EstanteOrigen")
@@ -141,10 +141,10 @@ model Estante {
 // CAJAS
 // =========================================
 model Caja {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  codigo      String   @unique @db.VarChar(50)
-  estante_id  String?  @db.Uuid
-  descripcion String?  @db.Text
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo      String  @unique @db.VarChar(50)
+  estante_id  String? @db.Uuid
+  descripcion String? @db.Text
 
   // Relaciones
   estante            Estante?     @relation(fields: [estante_id], references: [id], onDelete: SetNull)
@@ -171,10 +171,10 @@ model Inventario {
   cantidad       Int      @default(0)
 
   // Relaciones
-  proveedor   Proveedor?           @relation(fields: [proveedor_id], references: [id])
+  proveedor   Proveedor?            @relation(fields: [proveedor_id], references: [id])
   categoria   CategoriaHerramienta? @relation(fields: [categoria_id], references: [id])
-  caja        Caja?                @relation(fields: [caja_id], references: [id], onDelete: SetNull)
-  estante     Estante?             @relation(fields: [estante_id], references: [id], onDelete: SetNull)
+  caja        Caja?                 @relation(fields: [caja_id], references: [id], onDelete: SetNull)
+  estante     Estante?              @relation(fields: [estante_id], references: [id], onDelete: SetNull)
   prestamos   Prestamo[]
   movimientos Movimiento[]
 
@@ -223,14 +223,14 @@ model Movimiento {
   observaciones   String?   @db.Text
 
   // Relaciones
-  inventario      Inventario? @relation(fields: [inventario_id], references: [id], onDelete: Cascade)
-  caja_origen     Caja?       @relation("CajaOrigen", fields: [caja_origen_id], references: [id])
-  caja_destino    Caja?       @relation("CajaDestino", fields: [caja_destino_id], references: [id])
-  est_origen      Estante?    @relation("EstanteOrigen", fields: [estante_origen], references: [id])
-  est_destino     Estante?    @relation("EstanteDestino", fields: [estante_destino], references: [id])
-  persona         Persona?    @relation(fields: [persona_id], references: [id])
-  usuario         Usuario?    @relation(fields: [usuario_id], references: [id])
-  prestamo        Prestamo?   @relation(fields: [prestamo_id], references: [id])
+  inventario   Inventario? @relation(fields: [inventario_id], references: [id], onDelete: Cascade)
+  caja_origen  Caja?       @relation("CajaOrigen", fields: [caja_origen_id], references: [id])
+  caja_destino Caja?       @relation("CajaDestino", fields: [caja_destino_id], references: [id])
+  est_origen   Estante?    @relation("EstanteOrigen", fields: [estante_origen], references: [id])
+  est_destino  Estante?    @relation("EstanteDestino", fields: [estante_destino], references: [id])
+  persona      Persona?    @relation(fields: [persona_id], references: [id])
+  usuario      Usuario?    @relation(fields: [usuario_id], references: [id])
+  prestamo     Prestamo?   @relation(fields: [prestamo_id], references: [id])
 
   @@map("movimientos")
 }

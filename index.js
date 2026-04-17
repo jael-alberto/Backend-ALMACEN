@@ -35,14 +35,13 @@ app.use('/api/movimientos', movimientoRoutes);
 
 
 
-// Ruta de prueba para ver si funciona
-app.get('/test', async (req, res) => {
-    try {
-        const result = await pool.query('SELECT NOW()');
-        res.json({ mensaje: "Conexión exitosa", hora: result.rows[0] });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+// Manejo de errores global (incluyendo JSON malformado)
+app.use((err, req, res, next) => {
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+        return res.status(400).json({ error: "JSON malformado" });
     }
+    console.error(err.stack);
+    res.status(500).json({ error: "Error interno del servidor" });
 });
 
 const PORT = process.env.PORT || 4000; // Usamos el 4000 para no chocar con el frontend

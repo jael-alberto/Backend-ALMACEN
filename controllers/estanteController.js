@@ -1,4 +1,5 @@
 const { prisma } = require('../db');
+const { generarCodigoAleatorio } = require('../utils/generadores');
 
 const estanteController = {
     // Listar y buscar por código o ubicación
@@ -21,15 +22,22 @@ const estanteController = {
         }
     },
 
-    // Crear estante
+    // Crear estante con código automático
     create: async (req, res) => {
         try {
-            const nuevo = await prisma.estante.create({ data: req.body });
+            let data = req.body;
+
+            // LÓGICA DE CÓDIGO AUTOMÁTICO (4 números)
+            if (!data.codigo || data.codigo.trim() === "") {
+                data.codigo = generarCodigoAleatorio("EST");
+            }
+
+            const nuevo = await prisma.estante.create({ data });
             res.status(201).json(nuevo);
         } catch (error) {
             console.error("Error en estantes.create:", error);
             if (error.code === 'P2002') {
-                return res.status(400).json({ error: "El código de estante ya existe" });
+                return res.status(400).json({ error: "El código de estante generado ya existe. Intente de nuevo." });
             }
             res.status(500).json({ error: "Error al crear estante" });
         }
@@ -40,7 +48,11 @@ const estanteController = {
         try {
             const estante = await prisma.estante.findUnique({
                 where: { id: req.params.id },
-                include: { cajas: true } // Opcional: ver qué cajas tiene el estante
+                include: {
+                    cajas: true,
+                    // Si tienes relación directa de herramientas que no están en cajas:
+                    // inventario: true 
+                }
             });
             if (!estante) return res.status(404).json({ error: "Estante no encontrado" });
             res.json(estante);
@@ -58,6 +70,9 @@ const estanteController = {
             });
             res.json(actualizada);
         } catch (error) {
+            if (error.code === 'P2002') {
+                return res.status(400).json({ error: "Ese código de estante ya está en uso" });
+            }
             res.status(500).json({ error: "Error al actualizar estante" });
         }
     },
@@ -68,7 +83,8 @@ const estanteController = {
             await prisma.estante.delete({ where: { id: req.params.id } });
             res.json({ message: "Estante eliminado correctamente" });
         } catch (error) {
-            res.status(500).json({ error: "Error al eliminar (puede tener cajas o productos asociados)" });
+            // Nota: Prisma lanzará error si hay herramientas o cajas vinculadas por la integridad referencial
+            res.status(500).json({ error: "No se puede eliminar: el estante tiene cajas o herramientas asignadas" });
         }
     }
 };

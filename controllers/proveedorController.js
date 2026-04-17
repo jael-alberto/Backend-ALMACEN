@@ -1,15 +1,17 @@
 const { prisma } = require('../db');
+const { generarCodigoAleatorio } = require('../utils/generadores');
 
 const proveedorController = {
     // 1. Obtener todos (con búsqueda opcional)
     getAll: async (req, res) => {
-        const { search } = req.query; // Capturamos el parámetro de búsqueda ?search=valor
+        const { search } = req.query;
         try {
             const proveedores = await prisma.proveedor.findMany({
                 where: search ? {
                     OR: [
                         { nombre_empresa: { contains: search, mode: 'insensitive' } },
-                        { nombre_contacto: { contains: search, mode: 'insensitive' } }
+                        { nombre_contacto: { contains: search, mode: 'insensitive' } },
+                        { codigo: { contains: search, mode: 'insensitive' } } // Añadida búsqueda por código
                     ]
                 } : {},
                 orderBy: { nombre_empresa: 'asc' }
@@ -20,25 +22,40 @@ const proveedorController = {
         }
     },
 
-    // 2. Crear
+    // 2. Crear con Código Automático
     create: async (req, res) => {
         try {
-            const nuevo = await prisma.proveedor.create({ data: req.body });
+            let data = req.body;
+
+            // Generar código si no viene en la petición
+            if (!data.codigo || data.codigo.trim() === "") {
+                data.codigo = generarCodigoAleatorio("PROV");
+            }
+
+            const nuevo = await prisma.proveedor.create({ data });
             res.status(201).json(nuevo);
         } catch (error) {
-            if (error.code === 'P2002') return res.status(400).json({ error: "El código ya existe" });
-            res.status(500).json({ error: "Error al crear" });
+            if (error.code === 'P2002') {
+                return res.status(400).json({ error: "El código de proveedor ya existe. Intente de nuevo." });
+            }
+            res.status(500).json({ error: "Error al crear proveedor" });
         }
     },
 
     // 3. Obtener uno por ID
     getById: async (req, res) => {
         try {
-            const proveedor = await prisma.proveedor.findUnique({ where: { id: req.params.id } });
-            if (!proveedor) return res.status(404).json({ error: "No encontrado" });
+            const proveedor = await prisma.proveedor.findUnique({
+                where: { id: req.params.id },
+                include: {
+                    // Opcional: ver qué productos nos suministra este proveedor
+                    inventario: true
+                }
+            });
+            if (!proveedor) return res.status(404).json({ error: "Proveedor no encontrado" });
             res.json(proveedor);
         } catch (error) {
-            res.status(500).json({ error: "Error al buscar" });
+            res.status(500).json({ error: "Error al buscar proveedor" });
         }
     },
 
@@ -51,7 +68,10 @@ const proveedorController = {
             });
             res.json(actualizado);
         } catch (error) {
-            res.status(500).json({ error: "Error al actualizar" });
+            if (error.code === 'P2002') {
+                return res.status(400).json({ error: "Ese código de proveedor ya está en uso" });
+            }
+            res.status(500).json({ error: "Error al actualizar proveedor" });
         }
     },
 
@@ -61,7 +81,8 @@ const proveedorController = {
             await prisma.proveedor.delete({ where: { id: req.params.id } });
             res.json({ message: "Proveedor eliminado correctamente" });
         } catch (error) {
-            res.status(500).json({ error: "Error al eliminar (puede que tenga inventario asociado)" });
+            // El catch captura si intentas borrar un proveedor que tiene herramientas en el inventario
+            res.status(500).json({ error: "No se puede eliminar: existen artículos en el inventario asociados a este proveedor" });
         }
     }
 };

@@ -44,7 +44,7 @@ const validarUsuario = (req, res, next) => {
 
     // 6. Validar campo Activo (Boolean)
     if (activo !== undefined && typeof activo !== 'boolean') {
-        errores.push("El campo 'activo' debe ser true o false.");
+        errores.push("El campo 'activo' debe ser verdadero o falso.");
     }
 
     // --- RESPUESTA ---

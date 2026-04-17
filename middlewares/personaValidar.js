@@ -1,7 +1,7 @@
 const { esEmail, esTelefono, esCedula, esMatricula } = require('../utils/validadores');
 
 const validarPersona = (req, res, next) => {
-    const { nombres, apellidos, email, telefono, numero_documento, tipo_documento } = req.body;
+    const { nombres, apellidos, email, telefono, numero_documento, tipo_documento, tipo } = req.body;
     const errores = [];
 
     // 1. Validar Nombres y Apellidos
@@ -13,6 +13,11 @@ const validarPersona = (req, res, next) => {
         errores.push("El correo electrónico es obligatorio.");
     } else if (!esEmail(email)) {
         errores.push("El formato del correo electrónico no es válido.");
+    }
+
+
+    if (!tipo || tipo.trim() === "") {
+        errores.push("El tipo es obligatorio.");
     }
 
     // 3. Validar Tipo de Documento (Permitir Cédula y Matrícula)
