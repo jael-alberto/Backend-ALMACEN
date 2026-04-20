@@ -1,57 +1,55 @@
-const { esUUID } = require('../utils/validadores');
+const { esUUID } = require('../utils/validadores'); // Asegúrate de tener esta utilidad
 
 const validarInventario = (req, res, next) => {
     const {
-        codigo, nombre, proveedor_id, categoria_id,
-        valor_estimado, caja_id, estante_id, estado, cantidad
+        nombre,
+        proveedor_id,
+        categoria_id,
+        ubicacion_id,
+        valor_estimado,
+        cantidad,
+        estado
     } = req.body;
 
     const errores = [];
 
-    // 1. Validar Código y Nombre (Obligatorios)
-    if (!codigo || codigo.trim() === "") {
-        errores.push("El código del artículo es obligatorio.");
-    } else if (codigo.length > 50) {
-        errores.push("El código no puede exceder los 50 caracteres.");
-    }
-
+    // 1. Validar Nombre (Obligatorio)
     if (!nombre || nombre.trim() === "") {
         errores.push("El nombre del artículo es obligatorio.");
     } else if (nombre.length > 150) {
         errores.push("El nombre no puede exceder los 150 caracteres.");
     }
 
-    // 2. Lógica de Almacenamiento (Exclusión Mutua)
-    // Caso A: Ambos están llenos
-    if (caja_id && estante_id) {
-        errores.push("No puede asignar una caja y un estante al mismo tiempo. Si la herramienta está en una caja, el estante se hereda de la ubicación de la caja.");
-    }
-
-    // Caso B: Ambos están vacíos (Opcional, depende si permites herramientas "en el aire")
-    if (!caja_id && !estante_id) {
-        errores.push("Debe especificar una ubicación: ya sea una caja o un estante directamente.");
-    }
-
-    // 3. Validar Formato de UUIDs
-    const relaciones = { proveedor_id, categoria_id, caja_id, estante_id };
-    for (const [campo, valor] of Object.entries(relaciones)) {
-        if (valor && !esUUID(valor)) {
-            errores.push(`El campo ${campo} debe ser un UUID válido.`);
-        }
-    }
-
-    // 4. Validar Cantidad
+    // 2. Validar Cantidad (Debe ser un número entero positivo)
     if (cantidad !== undefined) {
-        if (!Number.isInteger(cantidad) || cantidad < 0) {
+        if (!Number.isInteger(Number(cantidad)) || Number(cantidad) < 0) {
             errores.push("La cantidad debe ser un número entero mayor o igual a 0.");
         }
     }
 
-    // 5. Validar Valor Estimado
+    // 3. Validar Valor Estimado (Debe ser un número decimal positivo)
     if (valor_estimado !== undefined && valor_estimado !== null) {
-        if (isNaN(valor_estimado) || valor_estimado < 0) {
-            errores.push("El valor estimado debe ser un número positivo.");
+        if (isNaN(valor_estimado) || Number(valor_estimado) < 0) {
+            errores.push("El valor estimado debe ser un número válido mayor o igual a 0.");
         }
+    }
+
+    // 4. Validar IDs de Relación (Deben ser UUIDs válidos si se proporcionan)
+    if (proveedor_id && !esUUID(proveedor_id)) {
+        errores.push("El ID del proveedor no tiene un formato válido (UUID).");
+    }
+
+    if (categoria_id && !esUUID(categoria_id)) {
+        errores.push("El ID de la categoría no tiene un formato válido (UUID).");
+    }
+
+    if (ubicacion_id && !esUUID(ubicacion_id)) {
+        errores.push("El ID de la ubicación no tiene un formato válido (UUID).");
+    }
+
+    // 5. Validar Estado (Opcional, pero limitado)
+    if (estado && estado.length > 50) {
+        errores.push("El estado no puede exceder los 50 caracteres.");
     }
 
     // --- RESPUESTA ---
@@ -63,6 +61,7 @@ const validarInventario = (req, res, next) => {
         });
     }
 
+    // Si todo está bien, pasamos al controlador
     next();
 };
 

@@ -27,9 +27,19 @@ const proveedorController = {
         try {
             let data = req.body;
 
-            // Generar código si no viene en la petición
+            // LÓGICA DE CÓDIGO AUTOMÁTICO
             if (!data.codigo || data.codigo.trim() === "") {
-                data.codigo = generarCodigoAleatorio("PROV");
+                let codigoGenerado;
+                let existe = true;
+
+                while (existe) {
+                    codigoGenerado = generarCodigoAleatorio("INV");
+                    const duplicado = await prisma.inventario.findUnique({
+                        where: { codigo: codigoGenerado }
+                    });
+                    if (!duplicado) existe = false;
+                }
+                data.codigo = codigoGenerado;
             }
 
             const nuevo = await prisma.proveedor.create({ data });

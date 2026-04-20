@@ -1,6 +1,6 @@
 const { esUUID } = require('../utils/validadores');
 
-const validarMovimientoAutomatico = (req, res, next) => {
+const validarMovimiento = (req, res, next) => {
     const { inventario_id, tipo, cantidad, usuario_id } = req.body;
     const errores = [];
 
@@ -24,3 +24,5 @@ const validarMovimientoAutomatico = (req, res, next) => {
 
     next();
 };
+
+module.exports = { validarMovimiento };

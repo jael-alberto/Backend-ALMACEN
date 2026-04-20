@@ -4,25 +4,33 @@ const { generarCodigoAleatorio } = require('../utils/generadores');
 const inventarioController = {
     // Listar y buscar por nombre o código
     getAll: async (req, res) => {
-        const { search } = req.query;
+        const { search, categoria, ubicacion } = req.query;
         try {
             const items = await prisma.inventario.findMany({
-                where: search ? {
-                    OR: [
-                        { nombre: { contains: search, mode: 'insensitive' } },
-                        { codigo: { contains: search, mode: 'insensitive' } }
+                where: {
+                    AND: [
+                        categoria ? { categoria_id: categoria } : {},
+                        ubicacion ? { ubicacion_id: ubicacion } : {},
+                        search ? {
+                            OR: [
+                                { nombre: { contains: search, mode: 'insensitive' } },
+                                { codigo: { contains: search, mode: 'insensitive' } }
+                            ]
+                        } : {}
                     ]
-                } : {},
+                },
                 include: {
                     proveedor: true,
                     categoria: true,
-                    caja: true,
-                    estante: true
+                    ubicacion: {
+                        include: { padre: true } // Para saber en qué estante está la caja, por ejemplo
+                    }
                 },
                 orderBy: { nombre: 'asc' }
             });
             res.json(items);
         } catch (error) {
+            console.error("Error en inventario.getAll:", error);
             res.status(500).json({ error: "Error al obtener el inventario" });
         }
     },
@@ -34,29 +42,31 @@ const inventarioController = {
 
             // LÓGICA DE CÓDIGO AUTOMÁTICO
             if (!data.codigo || data.codigo.trim() === "") {
-                data.codigo = generarCodigoAleatorio("INV");
+                let codigoGenerado;
+                let existe = true;
+
+                while (existe) {
+                    codigoGenerado = generarCodigoAleatorio("INV");
+                    const duplicado = await prisma.inventario.findUnique({
+                        where: { codigo: codigoGenerado }
+                    });
+                    if (!duplicado) existe = false;
+                }
+                data.codigo = codigoGenerado;
             }
 
-            // Crear el artículo y el movimiento de ENTRADA en una sola transacción
-            const resultado = await prisma.$transaction(async (tx) => {
-                const nuevoItem = await tx.inventario.create({ data });
+            // Convertir tipos de datos necesarios
+            if (data.cantidad) data.cantidad = parseInt(data.cantidad);
+            if (data.valor_estimado) data.valor_estimado = parseFloat(data.valor_estimado);
 
-                // Registrar movimiento automático de entrada
-                await tx.movimiento.create({
-                    data: {
-                        inventario_id: nuevoItem.id,
-                        tipo: 'ENTRADA',
-                        cantidad: nuevoItem.cantidad || 0,
-                        usuario_id: data.usuario_id_registro || null, // Asegúrate de mandar quién lo crea
-                        observaciones: "Ingreso inicial al sistema"
-                    }
-                });
-
-                return nuevoItem;
+            const nuevo = await prisma.inventario.create({
+                data,
+                include: { ubicacion: true }
             });
 
-            res.status(201).json(resultado);
+            res.status(201).json(nuevo);
         } catch (error) {
+            console.error("Error en inventario.create:", error);
             if (error.code === 'P2002') {
                 return res.status(400).json({ error: "El código de inventario ya existe" });
             }
@@ -64,7 +74,7 @@ const inventarioController = {
         }
     },
 
-    // Obtener uno por ID
+    // Obtener uno por ID con detalle de ubicación
     getById: async (req, res) => {
         try {
             const item = await prisma.inventario.findUnique({
@@ -72,8 +82,13 @@ const inventarioController = {
                 include: {
                     proveedor: true,
                     categoria: true,
-                    caja: true,
-                    estante: true
+                    ubicacion: {
+                        include: { padre: true }
+                    },
+                    movimientos: {
+                        take: 10,
+                        orderBy: { fecha: 'desc' }
+                    }
                 }
             });
             if (!item) return res.status(404).json({ error: "Artículo no encontrado" });
@@ -83,44 +98,24 @@ const inventarioController = {
         }
     },
 
-    // Actualizar (cambiar cantidad, mover de estante, etc.)
+    // Actualizar (Cambio de estado, ubicación, etc.)
     update: async (req, res) => {
         try {
-            const id = req.params.id;
-            const dataNueva = req.body;
+            const data = req.body;
 
-            // Buscamos el estado actual para comparar si hubo un traslado
-            const anterior = await prisma.inventario.findUnique({ where: { id } });
-            if (!anterior) return res.status(404).json({ error: "Artículo no encontrado" });
+            // Asegurar tipos de datos
+            if (data.cantidad) data.cantidad = parseInt(data.cantidad);
+            if (data.valor_estimado) data.valor_estimado = parseFloat(data.valor_estimado);
 
-            const actualizado = await prisma.$transaction(async (tx) => {
-                const itemActualizado = await tx.inventario.update({
-                    where: { id },
-                    data: dataNueva
-                });
-
-                // LÓGICA DE TRASLADO: Si cambió la caja o el estante, registramos el movimiento
-                if (dataNueva.caja_id !== anterior.caja_id || dataNueva.estante_id !== anterior.estante_id) {
-                    await tx.movimiento.create({
-                        data: {
-                            inventario_id: id,
-                            tipo: 'TRASLADO',
-                            cantidad: itemActualizado.cantidad,
-                            caja_origen_id: anterior.caja_id,
-                            caja_destino_id: itemActualizado.caja_id,
-                            estante_origen: anterior.estante_id,
-                            estante_destino: itemActualizado.estante_id,
-                            usuario_id: dataNueva.usuario_id_registro || null,
-                            observaciones: "Cambio de ubicación mediante edición"
-                        }
-                    });
-                }
-
-                return itemActualizado;
+            const actualizado = await prisma.inventario.update({
+                where: { id: req.params.id },
+                data: data
             });
-
             res.json(actualizado);
         } catch (error) {
+            if (error.code === 'P2002') {
+                return res.status(400).json({ error: "El código ya está en uso" });
+            }
             res.status(500).json({ error: "Error al actualizar el artículo" });
         }
     },
@@ -128,30 +123,10 @@ const inventarioController = {
     // Eliminar
     delete: async (req, res) => {
         try {
-            const id = req.params.id;
-
-            await prisma.$transaction(async (tx) => {
-                // Antes de borrar, registramos la SALIDA final
-                const item = await tx.inventario.findUnique({ where: { id } });
-
-                if (item) {
-                    await tx.movimiento.create({
-                        data: {
-                            inventario_id: id,
-                            tipo: 'SALIDA',
-                            cantidad: item.cantidad,
-                            usuario_id: null, // O el ID del usuario que borra si lo tienes
-                            observaciones: "Artículo eliminado del inventario"
-                        }
-                    });
-                }
-
-                await tx.inventario.delete({ where: { id } });
-            });
-
+            await prisma.inventario.delete({ where: { id: req.params.id } });
             res.json({ message: "Artículo eliminado correctamente" });
         } catch (error) {
-            res.status(500).json({ error: "Error al eliminar (puede tener préstamos activos)" });
+            res.status(500).json({ error: "Error al eliminar (puede tener préstamos o movimientos registrados)" });
         }
     }
 };
