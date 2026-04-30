@@ -2,7 +2,7 @@ const { prisma } = require('../db');
 const { generarCodigoAleatorio } = require('../utils/generadores');
 
 const inventarioController = {
-    // Listar y buscar por nombre o código
+    // Listar artículos con búsqueda por nombre/código y filtros
     getAll: async (req, res) => {
         const { search, categoria, ubicacion } = req.query;
         try {
@@ -20,7 +20,6 @@ const inventarioController = {
                     ]
                 },
                 include: {
-                    proveedor: true,
                     categoria: true,
                     ubicacion: {
                         include: { padre: true } // Para saber en qué estante está la caja, por ejemplo
@@ -35,17 +34,18 @@ const inventarioController = {
         }
     },
 
-    // Crear artículo en inventario
+    // Crear artículo con generación de código automática
     create: async (req, res) => {
         try {
             let data = req.body;
 
-            // LÓGICA DE CÓDIGO AUTOMÁTICO
+            // Generar código automático si no se proporciona
             if (!data.codigo || data.codigo.trim() === "") {
                 let codigoGenerado;
                 let existe = true;
 
                 while (existe) {
+                    // Usamos INV como prefijo por defecto para Inventario
                     codigoGenerado = generarCodigoAleatorio("INV");
                     const duplicado = await prisma.inventario.findUnique({
                         where: { codigo: codigoGenerado }
@@ -55,13 +55,12 @@ const inventarioController = {
                 data.codigo = codigoGenerado;
             }
 
-            // Convertir tipos de datos necesarios
+            // Asegurar que cantidad sea un entero
             if (data.cantidad) data.cantidad = parseInt(data.cantidad);
-            if (data.valor_estimado) data.valor_estimado = parseFloat(data.valor_estimado);
 
             const nuevo = await prisma.inventario.create({
                 data,
-                include: { ubicacion: true }
+                include: { ubicacion: true, categoria: true }
             });
 
             res.status(201).json(nuevo);
@@ -70,42 +69,40 @@ const inventarioController = {
             if (error.code === 'P2002') {
                 return res.status(400).json({ error: "El código de inventario ya existe" });
             }
-            res.status(500).json({ error: "Error al crear artículo" });
+            res.status(500).json({ error: "Error al crear el artículo" });
         }
     },
 
-    // Obtener uno por ID con detalle de ubicación
+    // Obtener un artículo por ID con detalle de ubicación e historial reciente
     getById: async (req, res) => {
         try {
             const item = await prisma.inventario.findUnique({
                 where: { id: req.params.id },
                 include: {
-                    proveedor: true,
                     categoria: true,
                     ubicacion: {
                         include: { padre: true }
                     },
                     movimientos: {
                         take: 10,
-                        orderBy: { fecha: 'desc' }
+                        orderBy: { fecha: 'desc' } // Según tu modelo Movimiento: 'fecha'
                     }
                 }
             });
             if (!item) return res.status(404).json({ error: "Artículo no encontrado" });
             res.json(item);
         } catch (error) {
+            console.error("Error en inventario.getById:", error);
             res.status(500).json({ error: "Error al buscar el artículo" });
         }
     },
 
-    // Actualizar (Cambio de estado, ubicación, etc.)
+    // Actualizar artículo
     update: async (req, res) => {
         try {
             const data = req.body;
 
-            // Asegurar tipos de datos
             if (data.cantidad) data.cantidad = parseInt(data.cantidad);
-            if (data.valor_estimado) data.valor_estimado = parseFloat(data.valor_estimado);
 
             const actualizado = await prisma.inventario.update({
                 where: { id: req.params.id },
@@ -113,20 +110,28 @@ const inventarioController = {
             });
             res.json(actualizado);
         } catch (error) {
+            console.error("Error en inventario.update:", error);
             if (error.code === 'P2002') {
-                return res.status(400).json({ error: "El código ya está en uso" });
+                return res.status(400).json({ error: "El código ya está en uso por otro artículo" });
             }
             res.status(500).json({ error: "Error al actualizar el artículo" });
         }
     },
 
-    // Eliminar
+    // Eliminar artículo
     delete: async (req, res) => {
         try {
             await prisma.inventario.delete({ where: { id: req.params.id } });
             res.json({ message: "Artículo eliminado correctamente" });
         } catch (error) {
-            res.status(500).json({ error: "Error al eliminar (puede tener préstamos o movimientos registrados)" });
+            console.error("Error en inventario.delete:", error);
+            // Error de restricción de llave foránea (si tiene préstamos o movimientos)
+            if (error.code === 'P2003') {
+                return res.status(400).json({
+                    error: "No se puede eliminar: el artículo tiene historial de movimientos o préstamos asociados."
+                });
+            }
+            res.status(500).json({ error: "Error al eliminar el artículo" });
         }
     }
 };

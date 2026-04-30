@@ -1,16 +1,7 @@
-const { esUUID } = require('../utils/validadores'); // Asegúrate de tener esta utilidad
+const { esUUID } = require('../utils/validadores'); // Asegúrate de tener esta función en tus utilidades
 
 const validarInventario = (req, res, next) => {
-    const {
-        nombre,
-        proveedor_id,
-        categoria_id,
-        ubicacion_id,
-        valor_estimado,
-        cantidad,
-        estado
-    } = req.body;
-
+    const { nombre, codigo, categoria_id, ubicacion_id, estado, cantidad } = req.body;
     const errores = [];
 
     // 1. Validar Nombre (Obligatorio)
@@ -20,36 +11,32 @@ const validarInventario = (req, res, next) => {
         errores.push("El nombre no puede exceder los 150 caracteres.");
     }
 
-    // 2. Validar Cantidad (Debe ser un número entero positivo)
-    if (cantidad !== undefined) {
+    // 2. Validar Código (Opcional en el body porque tu controller lo genera, pero si viene, se valida)
+    if (codigo && codigo.length > 50) {
+        errores.push("El código no puede exceder los 50 caracteres.");
+    }
+
+    // 3. Validar Categoría ID (Debe ser UUID si se proporciona)
+    if (categoria_id && !esUUID(categoria_id)) {
+        errores.push("El ID de categoría no es un UUID válido.");
+    }
+
+    // 4. Validar Ubicación ID (Debe ser UUID si se proporciona)
+    if (ubicacion_id && !esUUID(ubicacion_id)) {
+        errores.push("El ID de ubicación no es un UUID válido.");
+    }
+
+    // 5. Validar Estado
+    if (estado && estado.length > 50) {
+        errores.push("El estado no puede exceder los 50 caracteres.");
+    }
+
+    // 6. Validar Cantidad
+    // Verificamos que sea un número y que no sea negativo
+    if (cantidad !== undefined && cantidad !== null) {
         if (!Number.isInteger(Number(cantidad)) || Number(cantidad) < 0) {
             errores.push("La cantidad debe ser un número entero mayor o igual a 0.");
         }
-    }
-
-    // 3. Validar Valor Estimado (Debe ser un número decimal positivo)
-    if (valor_estimado !== undefined && valor_estimado !== null) {
-        if (isNaN(valor_estimado) || Number(valor_estimado) < 0) {
-            errores.push("El valor estimado debe ser un número válido mayor o igual a 0.");
-        }
-    }
-
-    // 4. Validar IDs de Relación (Deben ser UUIDs válidos si se proporcionan)
-    if (proveedor_id && !esUUID(proveedor_id)) {
-        errores.push("El ID del proveedor no tiene un formato válido (UUID).");
-    }
-
-    if (categoria_id && !esUUID(categoria_id)) {
-        errores.push("El ID de la categoría no tiene un formato válido (UUID).");
-    }
-
-    if (ubicacion_id && !esUUID(ubicacion_id)) {
-        errores.push("El ID de la ubicación no tiene un formato válido (UUID).");
-    }
-
-    // 5. Validar Estado (Opcional, pero limitado)
-    if (estado && estado.length > 50) {
-        errores.push("El estado no puede exceder los 50 caracteres.");
     }
 
     // --- RESPUESTA ---
@@ -61,7 +48,6 @@ const validarInventario = (req, res, next) => {
         });
     }
 
-    // Si todo está bien, pasamos al controlador
     next();
 };
 

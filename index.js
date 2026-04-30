@@ -4,7 +4,6 @@ const { pool } = require('./db');
 const app = express();
 
 // Importar rutas
-const proveedorRoutes = require('./routes/proveedorRoutes');
 const personaRoutes = require('./routes/personaRoutes');
 const categoriaRoutes = require('./routes/categoriaRoutes');
 const roleRoutes = require('./routes/roleRoutes');
@@ -20,7 +19,6 @@ app.use(cors());
 app.use(express.json());
 
 // Rutas
-app.use('/api/proveedores', proveedorRoutes);
 app.use('/api/personas', personaRoutes);
 app.use('/api/categorias', categoriaRoutes);
 app.use('/api/roles', roleRoutes);
