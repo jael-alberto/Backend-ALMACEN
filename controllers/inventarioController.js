@@ -34,6 +34,28 @@ const inventarioController = {
         }
     },
 
+    getAlertasStock: async (req, res) => {
+        try {
+            // Buscamos productos donde la cantidad sea menor o igual al stock_minimo
+            // Nota: Prisma no permite comparar dos columnas directamente en 'where' de forma nativa 
+            // fácilmente sin 'queryRaw', por lo que usamos un filtro tras la consulta:
+            const inventarioCompleto = await prisma.inventario.findMany({
+                include: { categoria: true, ubicacion: true }
+            });
+
+            const alertas = inventarioCompleto.filter(item =>
+                item.cantidad <= item.stock_minimo
+            );
+
+            res.json({
+                total_alertas: alertas.length,
+                articulos: alertas
+            });
+        } catch (error) {
+            console.error("Error al obtener alertas:", error);
+            res.status(500).json({ error: "Error al generar reporte de alertas" });
+        }
+    },
     // Crear artículo con generación de código automática
     create: async (req, res) => {
         try {

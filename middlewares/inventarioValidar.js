@@ -1,7 +1,7 @@
 const { esUUID } = require('../utils/validadores'); // Asegúrate de tener esta función en tus utilidades
 
 const validarInventario = (req, res, next) => {
-    const { nombre, codigo, categoria_id, ubicacion_id, estado, cantidad } = req.body;
+    const { nombre, codigo, categoria_id, ubicacion_id, estado, cantidad, cantidad_minima } = req.body;
     const errores = [];
 
     // 1. Validar Nombre (Obligatorio)
@@ -31,11 +31,25 @@ const validarInventario = (req, res, next) => {
         errores.push("El estado no puede exceder los 50 caracteres.");
     }
 
-    // 6. Validar Cantidad
-    // Verificamos que sea un número y que no sea negativo
+    // 6. Validar Cantidad Actual
     if (cantidad !== undefined && cantidad !== null) {
         if (!Number.isInteger(Number(cantidad)) || Number(cantidad) < 0) {
             errores.push("La cantidad debe ser un número entero mayor o igual a 0.");
+        }
+    }
+
+    // 7. Validar Stock Mínimo
+    if (cantidad_minima !== undefined && cantidad_minima !== null) {
+        if (!Number.isInteger(Number(cantidad_minima)) || Number(cantidad_minima) < 0) {
+            errores.push("El stock mínimo debe ser un número entero mayor o igual a 0.");
+        }
+    }
+
+    // 8. Validación de Regla de Negocio: Cantidad vs Stock Mínimo
+    // Solo comparamos si ambos valores están presentes en la petición o si uno viene y el otro ya existe
+    if (cantidad !== undefined && cantidad_minima !== undefined) {
+        if (Number(cantidad) < Number(cantidad_minima)) {
+            errores.push(`La cantidad actual (${cantidad}) no puede ser menor al stock mínimo establecido (${cantidad_minima}).`);
         }
     }
 

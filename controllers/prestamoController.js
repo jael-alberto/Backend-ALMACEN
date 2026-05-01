@@ -3,21 +3,28 @@ const { prisma } = require('../db');
 const prestamoController = {
     // Listar y filtrar por estado o búsqueda general
     getAll: async (req, res) => {
-        const { search } = req.query;
+        const { search, estado } = req.query;
         try {
             const prestamos = await prisma.prestamo.findMany({
-                where: search ? {
-                    OR: [
-                        { estado: { contains: search, mode: 'insensitive' } },
-                        { observaciones: { contains: search, mode: 'insensitive' } }
+                where: {
+                    AND: [
+                        estado ? { estado: estado.toUpperCase() } : {},
+                        search ? {
+                            OR: [
+                                { estado: { contains: search, mode: 'insensitive' } },
+                                { observaciones: { contains: search, mode: 'insensitive' } },
+                                { persona: { nombres: { contains: search, mode: 'insensitive' } } },
+                                { inventario: { nombre: { contains: search, mode: 'insensitive' } } }
+                            ]
+                        } : {}
                     ]
-                } : {},
-                include: {
-                    inventario: true, // Qué se prestó
-                    persona: true,    // A quién se le prestó
-                    usuario: true     // Quién registró el préstamo
                 },
-                orderBy: { fecha_prestamo: 'desc' } // Los más recientes primero
+                include: {
+                    inventario: true,
+                    persona: true,
+                    usuario: { select: { nombre_usuario: true } }
+                },
+                orderBy: { fecha_prestamo: 'desc' }
             });
             res.json(prestamos);
         } catch (error) {
@@ -25,26 +32,149 @@ const prestamoController = {
         }
     },
 
-    // Crear un nuevo préstamo
-    create: async (req, res) => {
+    // Obtener solo préstamos ACTIVO (Buscador rápido para devoluciones)
+    getPendientes: async (req, res) => {
         try {
-            const nuevo = await prisma.prestamo.create({ data: req.body });
-            res.status(201).json(nuevo);
+            const pendientes = await prisma.prestamo.findMany({
+                where: { estado: 'ACTIVO' },
+                include: {
+                    inventario: { select: { nombre: true, codigo: true } },
+                    persona: { select: { nombres: true, apellidos: true } }
+                },
+                orderBy: { fecha_prestamo: 'asc' }
+            });
+            res.json(pendientes);
         } catch (error) {
-            res.status(500).json({ error: "Error al registrar el préstamo" });
+            res.status(500).json({ error: "Error al obtener préstamos pendientes" });
         }
     },
 
-    // Obtener un préstamo por ID con su detalle completo
+    // Crear un nuevo préstamo (Con validación de reserva mínima y alertas)
+    create: async (req, res) => {
+        const { inventario_id, persona_id, usuario_id, cantidad, observaciones } = req.body;
+        const cantSolicitada = parseInt(cantidad);
+
+        try {
+            const resultado = await prisma.$transaction(async (tx) => {
+                // 1. Obtener artículo y validar stock mínimo
+                const articulo = await tx.inventario.findUnique({ where: { id: inventario_id } });
+
+                if (!articulo) throw new Error("El artículo no existe.");
+
+                const cantidadResultante = articulo.cantidad - cantSolicitada;
+
+                // Bloqueo si baja del stock_minimo
+                if (cantidadResultante < articulo.stock_minimo) {
+                    throw new Error(`Operación denegada: El stock no puede bajar de la reserva mínima (${articulo.stock_minimo}). Disponible: ${articulo.cantidad}.`);
+                }
+
+                // 2. Crear el préstamo
+                const nuevoPrestamo = await tx.prestamo.create({
+                    data: {
+                        inventario_id,
+                        persona_id,
+                        usuario_id,
+                        cantidad: cantSolicitada,
+                        observaciones,
+                        estado: 'ACTIVO'
+                    }
+                });
+
+                // 3. Restar del inventario
+                const articuloActualizado = await tx.inventario.update({
+                    where: { id: inventario_id },
+                    data: { cantidad: { decrement: cantSolicitada } }
+                });
+
+                // 4. Registrar movimiento de SALIDA
+                await tx.movimiento.create({
+                    data: {
+                        inventario_id,
+                        tipo: 'SALIDA',
+                        cantidad: cantSolicitada,
+                        persona_id,
+                        usuario_id,
+                        observaciones: `Préstamo registrado. ID: ${nuevoPrestamo.id}`
+                    }
+                });
+
+                // 5. Preparar objeto de alerta si el stock quedó exactamente en el mínimo
+                const alerta = articuloActualizado.cantidad === articuloActualizado.stock_minimo
+                    ? { mensaje: `¡Alerta! ${articuloActualizado.nombre} ha alcanzado su stock mínimo.`, nivel: 'CRITICO' }
+                    : null;
+
+                return { nuevoPrestamo, alerta };
+            });
+
+            res.status(201).json({
+                status: "success",
+                data: resultado.nuevoPrestamo,
+                alerta: resultado.alerta
+            });
+        } catch (error) {
+            res.status(400).json({ status: "error", mensaje: error.message });
+        }
+    },
+
+    // Registrar Devolución (Suma stock automáticamente)
+    registrarDevolucion: async (req, res) => {
+        const { id } = req.params;
+        const { usuario_id, observaciones_dev, estado_fisico } = req.body;
+
+        try {
+            const resultado = await prisma.$transaction(async (tx) => {
+                const prestamo = await tx.prestamo.findUnique({ where: { id } });
+
+                if (!prestamo) throw new Error("Préstamo no encontrado.");
+                if (prestamo.estado === 'DEVUELTO') throw new Error("Ya fue devuelto.");
+
+                // 1. Marcar préstamo como devuelto
+                const actualizado = await tx.prestamo.update({
+                    where: { id },
+                    data: {
+                        estado: 'DEVUELTO',
+                        fecha_devolucion: new Date(),
+                        observaciones: observaciones_dev
+                            ? `${prestamo.observaciones || ''} | DEV: ${observaciones_dev}`
+                            : prestamo.observaciones
+                    }
+                });
+
+                // 2. Devolver stock al inventario
+                await tx.inventario.update({
+                    where: { id: prestamo.inventario_id },
+                    data: {
+                        cantidad: { increment: prestamo.cantidad },
+                        estado: estado_fisico || undefined
+                    }
+                });
+
+                // 3. Registrar movimiento de ENTRADA
+                await tx.movimiento.create({
+                    data: {
+                        inventario_id: prestamo.inventario_id,
+                        tipo: 'ENTRADA',
+                        cantidad: prestamo.cantidad,
+                        persona_id: prestamo.persona_id,
+                        usuario_id,
+                        observaciones: `Devolución de préstamo ID: ${id}`
+                    }
+                });
+
+                return actualizado;
+            });
+
+            res.json(resultado);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    },
+
     getById: async (req, res) => {
         try {
             const prestamo = await prisma.prestamo.findUnique({
                 where: { id: req.params.id },
-                include: {
-                    inventario: true,
-                    persona: true,
-                    usuario: true
-                }
+                include: { inventario: true, persona: true, usuario: true }
             });
             if (!prestamo) return res.status(404).json({ error: "Préstamo no encontrado" });
             res.json(prestamo);
@@ -53,26 +183,12 @@ const prestamoController = {
         }
     },
 
-    // Actualizar (Útil para marcar como devuelto o cambiar estado)
-    update: async (req, res) => {
-        try {
-            const actualizado = await prisma.prestamo.update({
-                where: { id: req.params.id },
-                data: req.body
-            });
-            res.json(actualizado);
-        } catch (error) {
-            res.status(500).json({ error: "Error al actualizar el préstamo" });
-        }
-    },
-
-    // Eliminar
     delete: async (req, res) => {
         try {
             await prisma.prestamo.delete({ where: { id: req.params.id } });
-            res.json({ message: "Registro de préstamo eliminado correctamente" });
+            res.json({ message: "Registro eliminado" });
         } catch (error) {
-            res.status(500).json({ error: "Error al eliminar el registro" });
+            res.status(500).json({ error: "No se puede eliminar un préstamo con historial activo" });
         }
     }
 };

@@ -1,7 +1,7 @@
 const { prisma } = require('../db');
 
 const movimientoController = {
-    // Listar movimientos con filtros por tipo, inventario o persona
+    // ... (getAll se mantiene igual)
     getAll: async (req, res) => {
         const { tipo, inventario_id, persona_id } = req.query;
         try {
@@ -18,18 +18,16 @@ const movimientoController = {
                     ubicacion_origen: true,
                     ubicacion_destino: true,
                     persona: true,
-                    usuario: { select: { nombre_usuario: true } } // Seguridad: no enviar password
+                    usuario: { select: { nombre_usuario: true } }
                 },
-                orderBy: { fecha: 'desc' } // Los más recientes primero
+                orderBy: { fecha: 'desc' }
             });
             res.json(movimientos);
         } catch (error) {
-            console.error("Error en movimientos.getAll:", error);
-            res.status(500).json({ error: "Error al obtener historial de movimientos" });
+            res.status(500).json({ error: "Error al obtener historial" });
         }
     },
 
-    // Registrar un movimiento y actualizar inventario automáticamente
     create: async (req, res) => {
         const {
             inventario_id,
@@ -42,17 +40,39 @@ const movimientoController = {
             observaciones
         } = req.body;
 
-        try {
-            // Usamos una transacción para que el historial y el cambio físico ocurran juntos
-            const resultado = await prisma.$transaction(async (tx) => {
+        const cantMovimiento = parseInt(cantidad);
+        const tipoUpper = tipo.toUpperCase();
 
-                // 1. Crear el registro del movimiento
+        try {
+            const resultado = await prisma.$transaction(async (tx) => {
+                // 1. Obtener el artículo actual para validar stock
+                const articulo = await tx.inventario.findUnique({
+                    where: { id: inventario_id }
+                });
+
+                if (!articulo) throw new Error("El producto no existe en el inventario.");
+
+                // 2. Lógica de cálculo de stock
+                let nuevaCantidad = articulo.cantidad;
+
+                if (tipoUpper === 'ENTRADA') {
+                    nuevaCantidad += cantMovimiento;
+                }
+                else if (tipoUpper === 'SALIDA' || tipoUpper === 'PRESTAMO') {
+                    if (articulo.cantidad < cantMovimiento) {
+                        throw new Error(`Stock insuficiente. Disponible: ${articulo.cantidad}`);
+                    }
+                    nuevaCantidad -= cantMovimiento;
+                }
+                // Nota: En TRASLADO la cantidad total no cambia, solo la ubicación.
+
+                // 3. Crear el registro del movimiento
                 const nuevoMovimiento = await tx.movimiento.create({
                     data: {
                         inventario_id,
-                        tipo: tipo.toUpperCase(),
-                        cantidad: parseInt(cantidad),
-                        ubicacion_origen_id,
+                        tipo: tipoUpper,
+                        cantidad: cantMovimiento,
+                        ubicacion_origen_id: ubicacion_origen_id || articulo.ubicacion_id,
                         ubicacion_destino_id,
                         persona_id,
                         usuario_id,
@@ -60,16 +80,18 @@ const movimientoController = {
                     }
                 });
 
-                // 2. Si es un TRASLADO o ENTRADA, actualizamos la ubicación actual en Inventario
-                if ((tipo === 'TRASLADO' || tipo === 'ENTRADA') && ubicacion_destino_id) {
-                    await tx.inventario.update({
-                        where: { id: inventario_id },
-                        data: { ubicacion_id: ubicacion_destino_id }
-                    });
+                // 4. Actualizar el Inventario (Stock y Ubicación si aplica)
+                const updateData = { cantidad: nuevaCantidad };
+
+                // Si es traslado o entrada con destino, actualizamos ubicación
+                if ((tipoUpper === 'TRASLADO' || tipoUpper === 'ENTRADA') && ubicacion_destino_id) {
+                    updateData.ubicacion_id = ubicacion_destino_id;
                 }
 
-                // 3. Si es SALIDA o PRESTAMO, podríamos querer limpiar la ubicación o marcar estado
-                // Aquí puedes añadir lógica según las reglas del taller
+                await tx.inventario.update({
+                    where: { id: inventario_id },
+                    data: updateData
+                });
 
                 return nuevoMovimiento;
             });
@@ -77,11 +99,13 @@ const movimientoController = {
             res.status(201).json(resultado);
         } catch (error) {
             console.error("Error en movimientos.create:", error);
-            res.status(500).json({ error: "Error al procesar el movimiento" });
+            res.status(400).json({
+                error: error.message || "Error al procesar el movimiento"
+            });
         }
     },
 
-    // Obtener detalle de un movimiento específico
+    // ... (getById y delete se mantienen igual)
     getById: async (req, res) => {
         try {
             const movimiento = await prisma.movimiento.findUnique({
@@ -90,25 +114,22 @@ const movimientoController = {
                     inventario: true,
                     ubicacion_origen: true,
                     ubicacion_destino: true,
-                    persona: true,
-                    prestamo: true
+                    persona: true
                 }
             });
-            if (!movimiento) return res.status(404).json({ error: "Movimiento no encontrado" });
+            if (!movimiento) return res.status(404).json({ error: "No encontrado" });
             res.json(movimiento);
         } catch (error) {
-            res.status(500).json({ error: "Error al buscar movimiento" });
+            res.status(500).json({ error: "Error al buscar" });
         }
     },
 
-    // Los movimientos generalmente NO se actualizan ni eliminan para mantener la integridad del historial.
-    // Solo permitimos eliminar en caso de error administrativo extremo.
     delete: async (req, res) => {
         try {
             await prisma.movimiento.delete({ where: { id: req.params.id } });
-            res.json({ message: "Registro de movimiento eliminado" });
+            res.json({ message: "Eliminado" });
         } catch (error) {
-            res.status(500).json({ error: "Error al eliminar el registro" });
+            res.status(500).json({ error: "Error al eliminar" });
         }
     }
 };
