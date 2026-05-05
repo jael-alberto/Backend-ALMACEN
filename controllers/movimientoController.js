@@ -18,7 +18,7 @@ const movimientoController = {
                     ubicacion_origen: true,
                     ubicacion_destino: true,
                     persona: true,
-                    usuario: { select: { nombre_usuario: true } }
+                    usuario: { select: { usuario: true } }
                 },
                 orderBy: { fecha: 'desc' }
             });

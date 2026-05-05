@@ -2,13 +2,16 @@ const express = require('express');
 const router = express.Router();
 const roleController = require('../controllers/roleController');
 const { validarRole } = require('../middlewares/roleValidar');
+const { verificarToken } = require('../middlewares/authMiddleware');
+const { checkPermiso } = require('../middlewares/permisoMiddleware');
 
-// Aplicar el middleware aquí
-router.post('/', validarRole, roleController.create);
-router.put('/:id', validarRole, roleController.update);
+router.use(verificarToken);
 
-router.get('/', roleController.getAll);
-router.get('/:id', roleController.getById);
-router.delete('/:id', roleController.delete);
+router.post('/', checkPermiso('USUARIOS', 'ingresar'), validarRole, roleController.create);
+router.put('/:id', checkPermiso('USUARIOS', 'actualizar'), validarRole, roleController.update);
+
+router.get('/', checkPermiso('USUARIOS', 'leer'), roleController.getAll);
+router.get('/:id', checkPermiso('USUARIOS', 'leer'), roleController.getById);
+router.delete('/:id', checkPermiso('USUARIOS', 'eliminar'), roleController.delete);
 
 module.exports = router;

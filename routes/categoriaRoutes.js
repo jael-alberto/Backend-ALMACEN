@@ -2,15 +2,15 @@ const express = require('express');
 const router = express.Router();
 const categoriaController = require('../controllers/categoriaController');
 const { validarCategoria } = require('../middlewares/categoriaValidar');
+const { verificarToken } = require('../middlewares/authMiddleware');
+const { checkPermiso } = require('../middlewares/permisoMiddleware');
 
-// Crear categoría
-router.post('/', validarCategoria, categoriaController.create);
+router.use(verificarToken);
 
-// Actualizar categoría
-router.put('/:id', validarCategoria, categoriaController.update);
-
-router.get('/', categoriaController.getAll);
-router.get('/:id', categoriaController.getById);
-router.delete('/:id', categoriaController.delete);
+router.post('/', checkPermiso('INVENTARIO', 'ingresar'), validarCategoria, categoriaController.create);
+router.get('/', checkPermiso('INVENTARIO', 'leer'), categoriaController.getAll);
+router.get('/:id', checkPermiso('INVENTARIO', 'leer'), categoriaController.getById);
+router.put('/:id', checkPermiso('INVENTARIO', 'actualizar'), validarCategoria, categoriaController.update);
+router.delete('/:id', checkPermiso('INVENTARIO', 'eliminar'), categoriaController.delete);
 
 module.exports = router;

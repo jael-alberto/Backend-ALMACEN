@@ -2,13 +2,18 @@ const express = require('express');
 const router = express.Router();
 const usuarioController = require('../controllers/usuarioController');
 const { validarUsuario } = require('../middlewares/usuarioValidar');
+const { verificarToken } = require('../middlewares/authMiddleware');
+const { checkPermiso } = require('../middlewares/permisoMiddleware');
 
-// --- RUTAS DE ESCRITURA (Llevan el middleware) ---
-router.post('/', validarUsuario, usuarioController.create);
-router.put('/:id', validarUsuario, usuarioController.update);
+// Aplicar verificación de token a todas las rutas de este archivo
+router.use(verificarToken);
 
-router.get('/', usuarioController.getAll);
-router.get('/:id', usuarioController.getById);
-router.delete('/:id', usuarioController.delete);
+// --- RUTAS DE ESCRITURA (Llevan el middleware de validación) ---
+router.post('/', checkPermiso('USUARIOS', 'ingresar'), validarUsuario, usuarioController.create);
+router.put('/:id', checkPermiso('USUARIOS', 'actualizar'), validarUsuario, usuarioController.update);
+
+router.get('/', checkPermiso('USUARIOS', 'leer'), usuarioController.getAll);
+router.get('/:id', checkPermiso('USUARIOS', 'leer'), usuarioController.getById);
+router.delete('/:id', checkPermiso('USUARIOS', 'eliminar'), usuarioController.delete);
 
 module.exports = router;

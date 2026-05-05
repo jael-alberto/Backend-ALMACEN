@@ -1,4 +1,5 @@
 const { prisma } = require('../db');
+const bcrypt = require('bcrypt');
 
 const usuarioController = {
     // Listar y buscar usuarios
@@ -28,8 +29,19 @@ const usuarioController = {
     // Crear usuario
     create: async (req, res) => {
         try {
-            const nuevo = await prisma.usuario.create({ data: req.body });
-            res.status(201).json(nuevo);
+            const data = { ...req.body };
+            
+            // Hashear la contraseña si existe
+            if (data.contrasena) {
+                const salt = await bcrypt.genSalt(10);
+                data.contrasena = await bcrypt.hash(data.contrasena, salt);
+            }
+
+            const nuevo = await prisma.usuario.create({ data });
+            
+            // No devolver la contraseña en la respuesta
+            const { contrasena, ...usuarioSinPass } = nuevo;
+            res.status(201).json(usuarioSinPass);
         } catch (error) {
             if (error.code === 'P2002') {
                 const target = error.meta.target;
@@ -61,11 +73,21 @@ const usuarioController = {
     // Actualizar
     update: async (req, res) => {
         try {
+            const data = { ...req.body };
+
+            // Si se envía una nueva contraseña, la hasheamos
+            if (data.contrasena) {
+                const salt = await bcrypt.genSalt(10);
+                data.contrasena = await bcrypt.hash(data.contrasena, salt);
+            }
+
             const actualizado = await prisma.usuario.update({
                 where: { id: req.params.id },
-                data: req.body
+                data: data
             });
-            res.json(actualizado);
+
+            const { contrasena, ...usuarioSinPass } = actualizado;
+            res.json(usuarioSinPass);
         } catch (error) {
             res.status(500).json({ error: "Error al actualizar usuario" });
         }

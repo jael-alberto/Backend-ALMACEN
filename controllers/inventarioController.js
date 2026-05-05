@@ -44,7 +44,7 @@ const inventarioController = {
             });
 
             const alertas = inventarioCompleto.filter(item =>
-                item.cantidad <= item.stock_minimo
+                item.cantidad <= item.cantidad_minima
             );
 
             res.json({
@@ -60,6 +60,11 @@ const inventarioController = {
     create: async (req, res) => {
         try {
             let data = req.body;
+
+            // Manejar subida de imagen
+            if (req.file) {
+                data.imagen_ruta = req.file.path.replace(/\\/g, '/'); // Normalizar ruta para web
+            }
 
             // Generar código automático si no se proporciona
             if (!data.codigo || data.codigo.trim() === "") {
@@ -123,6 +128,11 @@ const inventarioController = {
     update: async (req, res) => {
         try {
             const data = req.body;
+
+            // Manejar subida de imagen
+            if (req.file) {
+                data.imagen_ruta = req.file.path.replace(/\\/g, '/');
+            }
 
             if (data.cantidad) data.cantidad = parseInt(data.cantidad);
 

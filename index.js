@@ -13,12 +13,16 @@ const inventarioRoutes = require('./routes/inventarioRoutes');
 const prestamoRoutes = require('./routes/prestamoRoutes');
 const movimientoRoutes = require('./routes/movimientoRoutes');
 const ubicacionRoutes = require('./routes/ubicacionRoutes');
+const authRoutes = require('./routes/authRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
 
 // Middlewares
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
 // Rutas
+app.use('/api/auth', authRoutes);
 app.use('/api/personas', personaRoutes);
 app.use('/api/categorias', categoriaRoutes);
 app.use('/api/roles', roleRoutes);
@@ -28,6 +32,7 @@ app.use('/api/inventario', inventarioRoutes);
 app.use('/api/prestamos', prestamoRoutes);
 app.use('/api/movimientos', movimientoRoutes);
 app.use('/api/ubicaciones', ubicacionRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 
 

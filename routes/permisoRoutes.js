@@ -1,14 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const permisoController = require('../controllers/permisoController');
+const { verificarToken } = require('../middlewares/authMiddleware');
+const { checkPermiso } = require('../middlewares/permisoMiddleware');
 const { validarPermiso } = require('../middlewares/permisoValidar');
 
-// Aplicar validación en creación y actualización
-router.post('/', validarPermiso, permisoController.create);
-router.put('/:id', validarPermiso, permisoController.update);
+router.use(verificarToken);
 
-router.get('/', permisoController.getAll);
-router.get('/:id', permisoController.getById);
-router.delete('/:id', permisoController.delete);
+router.post('/', checkPermiso('USUARIOS', 'ingresar'), validarPermiso, permisoController.create);
+router.get('/', checkPermiso('USUARIOS', 'leer'), permisoController.getAll);
+router.get('/:id', checkPermiso('USUARIOS', 'leer'), permisoController.getById);
+router.put('/:id', checkPermiso('USUARIOS', 'actualizar'), validarPermiso, permisoController.update);
+router.delete('/:id', checkPermiso('USUARIOS', 'eliminar'), permisoController.delete);
 
 module.exports = router;

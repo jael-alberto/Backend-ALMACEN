@@ -22,7 +22,7 @@ const prestamoController = {
                 include: {
                     inventario: true,
                     persona: true,
-                    usuario: { select: { nombre_usuario: true } }
+                    usuario: { select: { usuario: true } }
                 },
                 orderBy: { fecha_prestamo: 'desc' }
             });
@@ -51,7 +51,8 @@ const prestamoController = {
 
     // Crear un nuevo préstamo (Con validación de reserva mínima y alertas)
     create: async (req, res) => {
-        const { inventario_id, persona_id, usuario_id, cantidad, observaciones } = req.body;
+        const { inventario_id, persona_id, cantidad, observaciones } = req.body;
+        const usuario_id = req.usuario.id; // Tomamos el ID del token por seguridad
         const cantSolicitada = parseInt(cantidad);
 
         try {
@@ -64,8 +65,8 @@ const prestamoController = {
                 const cantidadResultante = articulo.cantidad - cantSolicitada;
 
                 // Bloqueo si baja del stock_minimo
-                if (cantidadResultante < articulo.stock_minimo) {
-                    throw new Error(`Operación denegada: El stock no puede bajar de la reserva mínima (${articulo.stock_minimo}). Disponible: ${articulo.cantidad}.`);
+                if (cantidadResultante < articulo.cantidad_minima) {
+                    throw new Error(`Operación denegada: El stock no puede bajar de la reserva mínima (${articulo.cantidad_minima}). Disponible: ${articulo.cantidad}.`);
                 }
 
                 // 2. Crear el préstamo
@@ -99,7 +100,7 @@ const prestamoController = {
                 });
 
                 // 5. Preparar objeto de alerta si el stock quedó exactamente en el mínimo
-                const alerta = articuloActualizado.cantidad === articuloActualizado.stock_minimo
+                const alerta = articuloActualizado.cantidad === articuloActualizado.cantidad_minima
                     ? { mensaje: `¡Alerta! ${articuloActualizado.nombre} ha alcanzado su stock mínimo.`, nivel: 'CRITICO' }
                     : null;
 
@@ -119,7 +120,8 @@ const prestamoController = {
     // Registrar Devolución (Suma stock automáticamente)
     registrarDevolucion: async (req, res) => {
         const { id } = req.params;
-        const { usuario_id, observaciones_dev, estado_fisico } = req.body;
+        const { observaciones_dev, estado_fisico } = req.body;
+        const usuario_id = req.usuario.id; // Tomamos el ID del token por seguridad
 
         try {
             const resultado = await prisma.$transaction(async (tx) => {
